@@ -54,6 +54,7 @@
 @import "layouts/content.css";
 @import "layouts/editor.css";
 @import "layouts/whatsnew.css";
+@import "layouts/whatsnew-modal.css";
 @import "layouts/tags.css";
 @import "layouts/members.css";
 @import "layouts/member-activity.css";
@@ -1415,7 +1416,7 @@ Onboarding checklist: Share publication modal */
     opacity: .8;
 }
 
-.gh-share-links li a { 
+.gh-share-links li a {
     border: 1px solid #394047;
 }
 
