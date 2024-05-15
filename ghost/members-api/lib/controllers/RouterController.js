@@ -52,8 +52,7 @@ module.exports = class RouterController {
         memberAttributionService,
         sendEmailWithMagicLink,
         labsService,
-        newslettersService,
-        createMemberFromToken
+        newslettersService
     }) {
         this._offersAPI = offersAPI;
         this._paymentsService = paymentsService;
@@ -68,7 +67,6 @@ module.exports = class RouterController {
         this._memberAttributionService = memberAttributionService;
         this.labsService = labsService;
         this._newslettersService = newslettersService;
-        this._createMemberFromToken = createMemberFromToken;
     }
 
     async ensureStripe(_req, res, next) {
@@ -113,11 +111,18 @@ module.exports = class RouterController {
             return res.end('Bad Request.');
         }
 
+        const subscriptions = await member.related('stripeSubscriptions').fetch();
+
+        const activeSubscription = subscriptions.models.find((sub) => {
+            return ['active', 'trialing', 'unpaid', 'past_due'].includes(sub.get('status'));
+        });
+
+        let currency = activeSubscription?.get('plan_currency') || undefined;
+
         let customer;
         if (!req.body.subscription_id) {
             customer = await this._stripeAPIService.getCustomerForMemberCheckoutSession(member);
         } else {
-            const subscriptions = await member.related('stripeSubscriptions').fetch();
             const subscription = subscriptions.models.find((sub) => {
                 return sub.get('subscription_id') === req.body.subscription_id;
             });
@@ -128,13 +133,15 @@ module.exports = class RouterController {
                 });
                 return res.end(`Could not find subscription ${req.body.subscription_id}`);
             }
+            currency = subscription.get('plan_currency') || undefined;
             customer = await this._stripeAPIService.getCustomer(subscription.get('customer_id'));
         }
 
         const session = await this._stripeAPIService.createCheckoutSetupSession(customer, {
             successUrl: req.body.successUrl,
             cancelUrl: req.body.cancelUrl,
-            subscription_id: req.body.subscription_id
+            subscription_id: req.body.subscription_id,
+            currency
         });
         const publicKey = this._stripeAPIService.getPublicKey();
         const sessionInfo = {
@@ -197,7 +204,6 @@ module.exports = class RouterController {
      * @returns
      */
     async _getSubscriptionCheckoutData(body) {
-        const ghostPriceId = body.priceId;
         const tierId = body.tierId;
         const offerId = body.offerId;
 
@@ -206,33 +212,35 @@ module.exports = class RouterController {
         let offer;
 
         // Validate basic input
-        if (!ghostPriceId && !offerId && !tierId && !cadence) {
+        if (!offerId && !tierId) {
+            logging.error('[RouterController._getSubscriptionCheckoutData] Expected offerId or tierId, received none');
             throw new BadRequestError({
-                message: tpl(messages.badRequest)
+                message: tpl(messages.badRequest),
+                context: 'Expected offerId or tierId, received none'
             });
         }
 
-        if (offerId && (ghostPriceId || (tierId && cadence))) {
+        if (offerId && tierId) {
+            logging.error('[RouterController._getSubscriptionCheckoutData] Expected offerId or tierId, received both');
             throw new BadRequestError({
-                message: tpl(messages.badRequest)
-            });
-        }
-
-        if (ghostPriceId && tierId && cadence) {
-            throw new BadRequestError({
-                message: tpl(messages.badRequest)
+                message: tpl(messages.badRequest),
+                context: 'Expected offerId or tierId, received both'
             });
         }
 
         if (tierId && !cadence) {
+            logging.error('[RouterController._getSubscriptionCheckoutData] Expected cadence to be "month" or "year", received ', cadence);
             throw new BadRequestError({
-                message: tpl(messages.badRequest)
+                message: tpl(messages.badRequest),
+                context: 'Expected cadence to be "month" or "year", received ' + cadence
             });
         }
 
-        if (cadence && cadence !== 'month' && cadence !== 'year') {
+        if (tierId && cadence && cadence !== 'month' && cadence !== 'year') {
+            logging.error('[RouterController._getSubscriptionCheckoutData] Expected cadence to be "month" or "year", received ', cadence);
             throw new BadRequestError({
-                message: tpl(messages.badRequest)
+                message: tpl(messages.badRequest),
+                context: 'Expected cadence to be "month" or "year", received "' + cadence + '"'
             });
         }
 
@@ -556,21 +564,5 @@ module.exports = class RouterController {
             // Let the normal error middleware handle this error
             throw err;
         }
-    }
-
-    async createMemberFromToken(req, res) {
-        const {token} = req.body;
-
-        // If successful, creating the member will return a signin link we can redirect the member to
-        // This will sign them in automatically
-        const signinLink = await this._createMemberFromToken(token);
-
-        if (!signinLink) {
-            res.writeHead(400);
-            return res.end('Bad Request.');
-        }
-
-        // If the member exists, redirect to the members page with the token in the URL to create a session
-        res.redirect(signinLink);
     }
 };

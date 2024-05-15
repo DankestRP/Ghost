@@ -34,25 +34,24 @@ const BETA_FEATURES = [
     'additionalPaymentMethods',
     'i18n',
     'activitypub',
+    'internalLinking',
+    'stripeAutomaticTax',
     'webmentions'
 ];
 
 const ALPHA_FEATURES = [
+    'ActivityPub',
     'NestPlayground',
     'urlCache',
     'lexicalMultiplayer',
     'websockets',
-    'stripeAutomaticTax',
     'emailCustomization',
     'mailEvents',
     'collectionsCard',
     'tipsAndDonations',
     'importMemberTier',
     'lexicalIndicators',
-    // 'adminXOffers',
-    'adminXDemo',
-    'membersSpamPrevention',
-    'internalLinking'
+    'adminXDemo'
 ];
 
 module.exports.GA_KEYS = [...GA_FEATURES];
@@ -79,6 +78,10 @@ module.exports.getAll = () => {
     labs.members = settingsCache.get('members_signup_access') !== 'none';
 
     return labs;
+};
+
+module.exports.getAllFlags = function () {
+    return [...GA_FEATURES, ...BETA_FEATURES, ...ALPHA_FEATURES];
 };
 
 /**
@@ -139,7 +142,7 @@ module.exports.enabledHelper = function enabledHelper(options, callback) {
     return errString;
 };
 
-module.exports.enabledMiddleware = flag => (req, res, next) => {
+module.exports.enabledMiddleware = flag => function labsEnabledMw(req, res, next) {
     if (module.exports.isSet(flag) === true) {
         return next();
     } else {

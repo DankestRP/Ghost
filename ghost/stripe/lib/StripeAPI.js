@@ -475,6 +475,7 @@ module.exports = class StripeAPI {
             automatic_tax: {
                 enabled: this._config.enableAutomaticTax
             },
+            customer_update: this._config.enableAutomaticTax ? {address: 'auto'} : {},
             metadata,
             discounts,
             /*
@@ -526,6 +527,7 @@ module.exports = class StripeAPI {
             automatic_tax: {
                 enabled: this._config.enableAutomaticTax
             },
+            customer_update: this._config.enableAutomaticTax ? {address: 'auto'} : {},
             metadata,
             customer: customer ? customer.id : undefined,
             customer_email: !customer && customerEmail ? customerEmail : undefined,
@@ -554,7 +556,9 @@ module.exports = class StripeAPI {
     /**
      * @param {ICustomer} customer
      * @param {object} options
-     *
+     * @param {string} options.successUrl
+     * @param {string} options.cancelUrl
+     * @param {string} options.currency - 3-letter ISO code in lowercase, e.g. `usd`
      * @returns {Promise<import('stripe').Stripe.Checkout.Session>}
      */
     async createCheckoutSetupSession(customer, options) {
@@ -569,7 +573,11 @@ module.exports = class StripeAPI {
                 metadata: {
                     customer_id: customer.id
                 }
-            }
+            },
+
+            // Note: this is required for dynamic payment methods
+            // https://docs.stripe.com/api/checkout/sessions/create#create_checkout_session-currency
+            currency: this.labs.isSet('additionalPaymentMethods') ? options.currency : undefined
         });
 
         return session;
